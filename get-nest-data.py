@@ -4,11 +4,17 @@ import json
 import os
 import mysql.connector
 from mysql.connector import Error
+from dotenv import load_dotenv
+import os
+import logging
+from logging.handlers import RotatingFileHandler
 
+# Load environment variables from .env file
+load_dotenv()
 
-# Define your Google OAuth credentials
-CLIENT_ID = ''; # Replace with your OAuth client ID
-CLIENT_SECRET = ''; # Replace with your OAuth client secret
+# Access the environment variables
+CLIENT_ID = os.getenv('CLIENT_ID')
+CLIENT_SECRET = os.getenv('CLIENT_SECRET')
 REDIRECT_URI = 'https://www.atomicxterra.com/googleCallback'  # Replace with your redirect URI
 SCOPE = 'https://www.googleapis.com/auth/sdm.service'
 TOKEN_URL = 'https://www.googleapis.com/oauth2/v4/token'
@@ -16,6 +22,25 @@ TOKEN_URL = 'https://www.googleapis.com/oauth2/v4/token'
 # API URL for Smart Device Management
 SDM_API_URL = 'https://smartdevicemanagement.googleapis.com/v1/enterprises/7ab17f6b-d1d0-437f-acde-84d3d8a89c3a/devices'  # Replace with your enterprise ID
 TOKEN_FILE = '/home/trichard/projects/get-nest-data/tokens.json'  # File to store access and refresh tokens
+
+
+# Set up logger with rotating file handler
+log_file = '/home/trichard/projects/get-nest-data/get-nest-data.log'  # Replace with your desired log file path
+
+# Create a logger
+logger = logging.getLogger('nest_data_logger')
+logger.setLevel(logging.INFO)
+
+# Create a rotating file handler
+handler = RotatingFileHandler(log_file, maxBytes=5*1024*1024, backupCount=3)  # 5 MB file size, 3 backup files
+handler.setLevel(logging.INFO)
+
+# Create a formatter and set it for the handler
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+
+# Add the handler to the logger
+logger.addHandler(handler)
 
 # Step 1: Get Authorization Code (this needs to be done manually once)
 def get_authorization_url():
@@ -36,7 +61,7 @@ def exchange_code_for_tokens(authorization_code):
     response_data = response.json()
 
     if response.status_code != 200:
-        print(f"Error: {response_data}")
+        logger.error(f"Error: {response_data}")
         return None
 
     access_token = response_data.get('access_token')
@@ -58,7 +83,7 @@ def refresh_access_token(refresh_token):
     response_data = response.json()
 
     if response.status_code != 200:
-        print(f"Error: {response_data}")
+        logger.error(f"Error: {response_data}")
         return None
 
     new_access_token = response_data.get('access_token')
@@ -69,45 +94,32 @@ def refresh_access_token(refresh_token):
 # Step 4: Get the list of devices from Google Smart Device Management API
 def get_devices(access_token):
     try:
-
         connection = mysql.connector.connect(host='162.144.13.179',
             database='mutlizte_trichard',
             user='mutlizte_trichard_w',
             password='VfnWunjyCgusVBYu')
-        
+
         if connection.is_connected():
             db_Info = connection.get_server_info()
-            print("Connected to MySQL Server version ", db_Info)
+            logger.info(f"Connected to MySQL Server version {db_Info}")
             cursor = connection.cursor()
             cursor.execute("select database();")
             record = cursor.fetchone()
-            print("You're connected to database: ", record)
+            logger.info(f"You're connected to database: {record}")
 
         headers = {
             'Authorization': f'Bearer {access_token}',
             'Content-Type': 'application/json',
         }
-    
+
         response = requests.get(SDM_API_URL, headers=headers)
-    
+
         if response.status_code == 200:
             devices = response.json()
-            #print("Devices:", json.dumps(devices, indent=2))
 
             for device in devices["devices"]:
-                print(f"Device Name: {device['name']}")
-                #print(f"Device Type: {device['type']}")
-                #print(f"Assignee: {device['assignee']}")
-    
-                #print(f"Humidity: {device['traits']['sdm.devices.traits.Humidity']['ambientHumidityPercent']}")
-                #print(f"Connectivity Status: {device['traits']['sdm.devices.traits.Connectivity']['status']}")
-                #print(f"Thermo Status: {device['traits']['sdm.devices.traits.ThermostatHvac']['status']}")
-                #print(f"Temp : {device['traits']['sdm.devices.traits.Temperature']['ambientTemperatureCelsius']}")
-                #print(f"Heat To: {device['traits']['sdm.devices.traits.ThermostatTemperatureSetpoint']['heatCelsius']}")
-                #print(f"Temp Scale: {device['traits']['sdm.devices.traits.Settings']['temperatureScale']}")
-                #print(f"ThermostatMode: {device['traits']['sdm.devices.traits.ThermostatMode']['mode']}")
-                #print("\n---\n")
-    
+                logger.info(f"Device Name: {device['name']}")
+
                 unique_name = device['name']
                 custom_name = device['traits']['sdm.devices.traits.Info']['customName']
                 humidity = device['traits']['sdm.devices.traits.Humidity']['ambientHumidityPercent']
@@ -120,22 +132,22 @@ def get_devices(access_token):
 
                 mySql_insert_query = """INSERT INTO nest_data (unique_name, custom_name, mode, temperature, humidity, temp_setpoint, temp_scale, thermo_status) values (%s, %s, %s, %s, %s, %s, %s, %s)"""
                 record = (unique_name, custom_name, mode, temperature, humidity, temp_setpoint, temp_scale, thermo_status)
-                print(record)
+                logger.info(f"Record to insert: {record}")
                 cursor.execute(mySql_insert_query, record)
                 connection.commit()
-                print(cursor.rowcount, "Record inserted successfully into nest_data table")
-        
+                logger.info(f"{cursor.rowcount} Record inserted successfully into nest_data table")
+
         else:
-            print(f"Error fetching devices: {response.status_code}")
-            print(response.json())
+            logger.error(f"Error fetching devices: {response.status_code}")
+            logger.error(response.json())
 
     except Error as e:
-        print("Error while connecting to MySQL", e)
+        logger.error(f"Error while connecting to MySQL: {e}")
     finally:
         if connection.is_connected():
             cursor.close()
             connection.close()
-            print("MySQL connection is closed")
+            logger.info("MySQL connection is closed")
 
 # Step 5: Load tokens from a file
 def load_tokens():
@@ -160,16 +172,16 @@ def save_tokens(access_token, refresh_token, expires_in):
 def check_and_refresh_token(tokens):
     current_time = int(time.time())
     if current_time >= tokens['expires_at']:
-        print("Access token expired, refreshing...")
+        logger.info("Access token expired, refreshing...")
         new_access_token, new_expires_in = refresh_access_token(tokens['refresh_token'])
         if new_access_token:
             new_expires_at = current_time + new_expires_in
-            print(f"New access token: {new_access_token}")
-            print(f"New token expires at: {new_expires_at}")
+            logger.info(f"New access token: {new_access_token}")
+            logger.info(f"New token expires at: {new_expires_at}")
             save_tokens(new_access_token, tokens['refresh_token'], new_expires_in)
             return new_access_token
         else:
-            print("Failed to refresh access token.")
+            logger.error("Failed to refresh access token.")
             return None
 
     return tokens['access_token']
@@ -180,11 +192,11 @@ def authenticate_and_fetch_devices():
     tokens = load_tokens()
 
     if not tokens:
-        print("No tokens found. Please authenticate.")
+        logger.info("No tokens found. Please authenticate.")
         # 1. Get authorization URL and ask user to authenticate
-        print("Visit this URL to authenticate and get the authorization code:")
-        print(get_authorization_url())
-        
+        logger.info("Visit this URL to authenticate and get the authorization code:")
+        logger.info(get_authorization_url())
+
         # 2. Prompt user for the authorization code
         authorization_code = input("Enter the authorization code from the URL: ")
 
@@ -192,14 +204,14 @@ def authenticate_and_fetch_devices():
         access_token, refresh_token, expires_in = exchange_code_for_tokens(authorization_code)
 
         if access_token and refresh_token:
-            print(f"Access Token: {access_token}")
-            print(f"Refresh Token: {refresh_token}")
-            print(f"Access Token Expires In: {expires_in} seconds")
+            logger.info(f"Access Token: {access_token}")
+            logger.info(f"Refresh Token: {refresh_token}")
+            logger.info(f"Access Token Expires In: {expires_in} seconds")
 
             # 4. Save the tokens to file
             save_tokens(access_token, refresh_token, expires_in)
         else:
-            print("Error obtaining tokens.")
+            logger.error("Error obtaining tokens.")
             return
 
         # Use the access token to fetch devices
@@ -212,7 +224,7 @@ def authenticate_and_fetch_devices():
             # Fetch devices from the Smart Device Management API
             get_devices(access_token)
         else:
-            print("Could not authenticate, token refresh failed.")
+            logger.error("Could not authenticate, token refresh failed.")
 
 # Main Function to run the task
 if __name__ == "__main__":
