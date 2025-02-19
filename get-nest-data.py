@@ -7,8 +7,6 @@ from mysql.connector import Error
 
 
 # Define your Google OAuth credentials
-CLIENT_ID = '124412772589-15kitj5tj7v867jb0rf7ovbom8n8ob2p.apps.googleusercontent.com'  # Replace with your OAuth client ID
-CLIENT_SECRET = '<your secret>'  # Replace with your OAuth client secret
 REDIRECT_URI = 'https://www.atomicxterra.com/googleCallback'  # Replace with your redirect URI
 SCOPE = 'https://www.googleapis.com/auth/sdm.service'
 TOKEN_URL = 'https://www.googleapis.com/oauth2/v4/token'
