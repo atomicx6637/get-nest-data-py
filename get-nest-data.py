@@ -15,7 +15,7 @@ TOKEN_URL = 'https://www.googleapis.com/oauth2/v4/token'
 
 # API URL for Smart Device Management
 SDM_API_URL = 'https://smartdevicemanagement.googleapis.com/v1/enterprises/7ab17f6b-d1d0-437f-acde-84d3d8a89c3a/devices'  # Replace with your enterprise ID
-TOKEN_FILE = '/home/trichard/projects/tokens.json'  # File to store access and refresh tokens
+TOKEN_FILE = '/home/trichard/projects/get-nest-data/tokens.json'  # File to store access and refresh tokens
 
 # Step 1: Get Authorization Code (this needs to be done manually once)
 def get_authorization_url():
