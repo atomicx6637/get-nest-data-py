@@ -1,3 +1,6 @@
 .env
 tokens.json
+weather_config.json
 *.log
+service-account-file.json
+*.bak

@@ -1,0 +1,138 @@
+import requests
+import json
+import logging
+import google.auth
+from google.auth.transport.requests import Request
+from google.oauth2 import service_account
+import mysql.connector
+from mysql.connector import Error
+import os
+
+# Path to your service account credentials JSON file
+#SERVICE_ACCOUNT_FILE = '/home/trichard/projects/get-nest-data/service-account-file.json'
+GOOGLE_APPLICATION_CREDENTIALS = "/home/trichard/projects/get-nest-data/service-account-file.json"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = GOOGLE_APPLICATION_CREDENTIALS
+
+
+# The API URL for Smart Device Management (SDM)
+SDM_API_URL = 'https://smartdevicemanagement.googleapis.com/v1/enterprises/7ab17f6b-d1d0-437f-acde-84d3d8a89c3a/devices'  # Replace with your enterprise ID
+TOKEN_FILE = '/home/trichard/projects/get-nest-data/tokens.json'  # File to store access and refresh tokens
+
+# Initialize logging
+log_file = '/home/trichard/projects/get-nest-data/sdm_api.log'
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[logging.FileHandler(log_file), logging.StreamHandler()]
+)
+
+# Authenticate with the service account
+def authenticate_with_service_account():
+    try:
+        #credentials = service_account.Credentials.from_service_account_file(
+        #    SERVICE_ACCOUNT_FILE,
+        #    scopes=["https://www.googleapis.com/auth/sdm.service"]
+        #)
+        credentials = service_account.Credentials.from_service_account_file(
+            GOOGLE_APPLICATION_CREDENTIALS,
+            scopes=["https://www.googleapis.com/auth/sdm.service"]
+        )
+
+        credentials.refresh(Request())  # Force token refresh
+
+        if credentials.valid:
+            logging.info("Service account authenticated successfully.")
+            return credentials
+        else:
+            logging.error("Service account authentication failed.")
+            return None
+
+    except google.auth.exceptions.DefaultCredentialsError as e:
+        logging.error(f"DefaultCredentialsError: {e}")
+    except google.auth.exceptions.RefreshError as e:
+        logging.error(f"RefreshError: {e}")
+    except Exception as e:
+        logging.error(f"Error authenticating with service account: {e}")
+        return None
+
+# Get the list of devices from the Smart Device Management API
+def get_devices(credentials):
+    try:
+        # Connect to the MySQL database
+        connection = mysql.connector.connect(
+            host='162.144.13.179',
+            database='mutlizte_trichard',
+            user='mutlizte_trichard_w',
+            password='VfnWunjyCgusVBYu'
+        )
+
+        if connection.is_connected():
+            db_Info = connection.get_server_info()
+            logging.info("Connected to MySQL Server version " + db_Info)
+            cursor = connection.cursor()
+            cursor.execute("select database();")
+            record = cursor.fetchone()
+            logging.info("You're connected to database: " + record[0])
+
+        # Prepare the API request with authentication
+        auth_request = Request()
+        credentials.refresh(auth_request)  # Refresh to get the current access token
+
+        headers = {
+            'Authorization': f'Bearer {credentials.token}',
+            'Content-Type': 'application/json',
+        }
+
+        # Send the request to the SDM API
+        response = requests.get(SDM_API_URL, headers=headers)
+
+        if response.status_code == 200:
+            devices = response.json()
+            logging.info(f"Retrieved {len(devices.get('devices', []))} devices.")
+            for device in devices.get("devices", []):
+                unique_name = device.get('name')
+                custom_name = device.get('traits', {}).get('sdm.devices.traits.Info', {}).get('customName', 'Unknown')
+                humidity = device.get('traits', {}).get('sdm.devices.traits.Humidity', {}).get('ambientHumidityPercent', 'N/A')
+                connectivity_status = device.get('traits', {}).get('sdm.devices.traits.Connectivity', {}).get('status', 'Unknown')
+                thermo_status = device.get('traits', {}).get('sdm.devices.traits.ThermostatHvac', {}).get('status', 'Unknown')
+                temperature = device.get('traits', {}).get('sdm.devices.traits.Temperature', {}).get('ambientTemperatureCelsius', 'N/A')
+                temp_setpoint = device.get('traits', {}).get('sdm.devices.traits.ThermostatTemperatureSetpoint', {}).get('heatCelsius', 'N/A')
+                temp_scale = device.get('traits', {}).get('sdm.devices.traits.Settings', {}).get('temperatureScale', 'Unknown')
+                mode = device.get('traits', {}).get('sdm.devices.traits.ThermostatMode', {}).get('mode', 'Unknown')
+
+                # Log the device data (you can also insert into DB here)
+                logging.info(f"Device: {custom_name} | Temp: {temperature}°{temp_scale} | Humidity: {humidity}% | Mode: {mode}")
+
+                # Insert data into MySQL (example)
+                mySql_insert_query = """INSERT INTO nest_data (unique_name, custom_name, mode, temperature, humidity, temp_setpoint, temp_scale, thermo_status) 
+                                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"""
+                record = (unique_name, custom_name, mode, temperature, humidity, temp_setpoint, temp_scale, thermo_status)
+                cursor.execute(mySql_insert_query, record)
+                connection.commit()
+                logging.info(f"Record inserted into nest_data table: {record}")
+
+        else:
+            logging.error(f"Error fetching devices: {response.status_code}")
+            logging.error(response.json())
+
+    except Error as e:
+        logging.error(f"Error while connecting to MySQL: {e}")
+
+    finally:
+        if connection.is_connected():
+            cursor.close()
+            connection.close()
+            logging.info("MySQL connection is closed")
+
+# Main function to authenticate and fetch devices
+def main():
+    credentials = authenticate_with_service_account()
+
+    if credentials:
+        get_devices(credentials)
+    else:
+        logging.error("Failed to authenticate using the service account.")
+
+if __name__ == "__main__":
+    main()
+

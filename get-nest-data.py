@@ -8,6 +8,10 @@ from dotenv import load_dotenv
 import os
 import logging
 from logging.handlers import RotatingFileHandler
+import smtplib
+import ssl
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 # Load environment variables from .env file
 load_dotenv()
@@ -23,6 +27,12 @@ TOKEN_URL = 'https://www.googleapis.com/oauth2/v4/token'
 SDM_API_URL = 'https://smartdevicemanagement.googleapis.com/v1/enterprises/7ab17f6b-d1d0-437f-acde-84d3d8a89c3a/devices'  # Replace with your enterprise ID
 TOKEN_FILE = '/home/trichard/projects/get-nest-data/tokens.json'  # File to store access and refresh tokens
 
+# Email Configuration
+SMTP_SERVER = "mail.atomicxterra.com"  # Change this if using another provider
+SMTP_PORT = 587
+EMAIL_SENDER = "trichard@atomicxterra.com"
+EMAIL_PASSWORD = "Yt@H5ZGRaR1$YeYxFl@nMS44tF&#@r" # Consider using an app password
+EMAIL_RECEIVER = "trichard1@gmail.com"
 
 # Set up logger with rotating file handler
 log_file = '/home/trichard/projects/get-nest-data/get-nest-data.log'  # Replace with your desired log file path
@@ -41,6 +51,40 @@ handler.setFormatter(formatter)
 
 # Add the handler to the logger
 logger.addHandler(handler)
+
+def send_failure_email(error_message):
+    """Send an email notification when a failure occurs."""
+    try:
+        subject = "⚠️ Google Nest API Failure Notification"
+        body = f"""
+        <html>
+        <body>
+            <h2 style="color: red;">Google Nest API Authentication Failed</h2>
+            <p><strong>Error Details:</strong></p>
+            <pre>{error_message}</pre>
+            <p>Please investigate the issue.</p>
+        </body>
+        </html>
+        """
+
+        # Create the email
+        msg = MIMEMultipart()
+        msg["From"] = EMAIL_SENDER
+        msg["To"] = EMAIL_RECEIVER
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "html"))
+
+        # Connect to SMTP server
+        context = ssl.create_default_context()
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls(context=context)  # Secure the connection
+            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            server.sendmail(EMAIL_SENDER, EMAIL_RECEIVER, msg.as_string())
+
+        print("✅ Failure notification email sent successfully!")
+
+    except Exception as e:
+        print(f"❌ Failed to send email: {e}")
 
 # Step 1: Get Authorization Code (this needs to be done manually once)
 def get_authorization_url():
@@ -62,6 +106,7 @@ def exchange_code_for_tokens(authorization_code):
 
     if response.status_code != 200:
         logger.error(f"Error: {response_data}")
+        send_failure_email(f"Error in exchange_code_for_tokens: {response_data}.")
         return None
 
     access_token = response_data.get('access_token')
@@ -84,6 +129,7 @@ def refresh_access_token(refresh_token):
 
     if response.status_code != 200:
         logger.error(f"Error: {response_data}")
+        send_failure_email(f"Error in refresh_access_token: {response_data}.")
         return None
 
     new_access_token = response_data.get('access_token')
@@ -139,10 +185,12 @@ def get_devices(access_token):
 
         else:
             logger.error(f"Error fetching devices: {response.status_code}")
+            send_failure_email(f"Error fetching devices: {resopnse.status_code}.")
             logger.error(response.json())
 
     except Error as e:
         logger.error(f"Error while connecting to MySQL: {e}")
+        send_failure_email(f"Error while connecting to MySQL: {e}")
     finally:
         if connection.is_connected():
             cursor.close()
@@ -182,6 +230,7 @@ def check_and_refresh_token(tokens):
             return new_access_token
         else:
             logger.error("Failed to refresh access token.")
+            send_failure_email(f"Failed to refresh access token.")
             return None
 
     return tokens['access_token']
@@ -193,6 +242,7 @@ def authenticate_and_fetch_devices():
 
     if not tokens:
         logger.info("No tokens found. Please authenticate.")
+        send_failure_email("No tokens found. Please authenticate.")
         # 1. Get authorization URL and ask user to authenticate
         logger.info("Visit this URL to authenticate and get the authorization code:")
         logger.info(get_authorization_url())
@@ -212,6 +262,7 @@ def authenticate_and_fetch_devices():
             save_tokens(access_token, refresh_token, expires_in)
         else:
             logger.error("Error obtaining tokens.")
+            send_failure_email("Error obtaining tokens.")
             return
 
         # Use the access token to fetch devices
@@ -225,6 +276,7 @@ def authenticate_and_fetch_devices():
             get_devices(access_token)
         else:
             logger.error("Could not authenticate, token refresh failed.")
+            send_failure_email("Could not authenticate, token refresh failed.")
 
 # Main Function to run the task
 if __name__ == "__main__":
