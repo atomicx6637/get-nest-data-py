@@ -1,0 +1,23 @@
+{
+    "GOOGLE_API_KEY": "AIzaSyBeIvvr7r35dwFDghuJzkrw4vOwFCOrtD4",
+    "EMAIL_SETTINGS": {
+        "SMTP_SERVER": "mail.atomicxterra.com",
+        "SMTP_PORT": 587,
+        "EMAIL_SENDER": "trichard@atomicxterra.com",
+        "EMAIL_PASSWORD": "Yt@H5ZGRaR1$YeYxFl@nMS44tF&#@r",
+        "EMAIL_RECEIVER": "trichard1@gmail.com"
+    },
+    "DATABASE_SETTINGS": {
+        "HOST": "162.144.13.179",
+        "DATABASE": "mutlizte_trichard",
+        "USER": "mutlizte_trichard_w",
+        "PASSWORD": "VfnWunjyCgusVBYu"
+    },
+    "LOGGING_FILE_PATH": "/home/trichard/projects/get-nest-data",
+    "TOKEN_FILE": "/home/trichard/projects/get-nest-data/nest_tokens.json",
+    "REDIRECT_URI": "https://www.atomicxterra.com/googleCallback",
+    "CLIENT_ID": "124412772589-15kitj5tj7v867jb0rf7ovbom8n8ob2p.apps.googleusercontent.com",
+    "CLIENT_SECRET": "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"
+
+}
+

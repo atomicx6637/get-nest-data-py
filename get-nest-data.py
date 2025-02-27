@@ -13,29 +13,33 @@ import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-# Load environment variables from .env file
-load_dotenv()
+# Load configuration from JSON file
+CONFIG_FILE = "/home/trichard/projects/get-nest-data/nest_config.json"
+
+def load_config():
+    """Load API keys and credentials from a JSON config file."""
+    with open(CONFIG_FILE, 'r') as file:
+        return json.load(file)
+
+config = load_config()
 
 # Access the environment variables
-CLIENT_ID = os.getenv('CLIENT_ID')
-CLIENT_SECRET = os.getenv('CLIENT_SECRET')
-REDIRECT_URI = 'https://www.atomicxterra.com/googleCallback'  # Replace with your redirect URI
-SCOPE = 'https://www.googleapis.com/auth/sdm.service'
-TOKEN_URL = 'https://www.googleapis.com/oauth2/v4/token'
+CLIENT_ID = config["CLIENT_ID"]
+CLIENT_SECRET = config["CLIENT_SECRET"]
+EMAIL_SETTINGS = config["EMAIL_SETTINGS"]
+DATABASE_SETTINGS = config["DATABASE_SETTINGS"]
+LOGGING_FILE_PATH = config["LOGGING_FILE_PATH"]
+TOKEN_FILE = config["TOKEN_FILE"]
+REDIRECT_URI = config["REDIRECT_URI"]
+
 
 # API URL for Smart Device Management
 SDM_API_URL = 'https://smartdevicemanagement.googleapis.com/v1/enterprises/7ab17f6b-d1d0-437f-acde-84d3d8a89c3a/devices'  # Replace with your enterprise ID
-TOKEN_FILE = '/home/trichard/projects/get-nest-data/tokens.json'  # File to store access and refresh tokens
-
-# Email Configuration
-SMTP_SERVER = "mail.atomicxterra.com"  # Change this if using another provider
-SMTP_PORT = 587
-EMAIL_SENDER = "trichard@atomicxterra.com"
-EMAIL_PASSWORD = "Yt@H5ZGRaR1$YeYxFl@nMS44tF&#@r" # Consider using an app password
-EMAIL_RECEIVER = "trichard1@gmail.com"
+SCOPE = 'https://www.googleapis.com/auth/sdm.service'
+TOKEN_URL = 'https://www.googleapis.com/oauth2/v4/token'
 
 # Set up logger with rotating file handler
-log_file = '/home/trichard/projects/get-nest-data/get-nest-data.log'  # Replace with your desired log file path
+log_file = LOGGING_FILE_PATH + 'get-nest-data.log'  # Replace with your desired log file path
 
 # Create a logger
 logger = logging.getLogger('nest_data_logger')
@@ -69,17 +73,17 @@ def send_failure_email(error_message):
 
         # Create the email
         msg = MIMEMultipart()
-        msg["From"] = EMAIL_SENDER
-        msg["To"] = EMAIL_RECEIVER
+        msg["From"] = EMAIL_SETTINGS["EMAIL_SENDER"]
+        msg["To"] = EMAIL_SETTINGS["EMAIL_RECEIVER"]
         msg["Subject"] = subject
         msg.attach(MIMEText(body, "html"))
 
         # Connect to SMTP server
         context = ssl.create_default_context()
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-            server.starttls(context=context)  # Secure the connection
-            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
-            server.sendmail(EMAIL_SENDER, EMAIL_RECEIVER, msg.as_string())
+        with smtplib.SMTP(EMAIL_SETTINGS["SMTP_SERVER"], EMAIL_SETTINGS["SMTP_PORT"]) as server:
+            server.starttls(context=context)
+            server.login(EMAIL_SETTINGS["EMAIL_SENDER"], EMAIL_SETTINGS["EMAIL_PASSWORD"])
+            server.sendmail(EMAIL_SETTINGS["EMAIL_SENDER"], EMAIL_SETTINGS["EMAIL_RECEIVER"], msg.as_string())
 
         print("✅ Failure notification email sent successfully!")
 
@@ -140,10 +144,12 @@ def refresh_access_token(refresh_token):
 # Step 4: Get the list of devices from Google Smart Device Management API
 def get_devices(access_token):
     try:
-        connection = mysql.connector.connect(host='162.144.13.179',
-            database='mutlizte_trichard',
-            user='mutlizte_trichard_w',
-            password='VfnWunjyCgusVBYu')
+        connection = mysql.connector.connect(
+            host=DATABASE_SETTINGS["HOST"],
+            database=DATABASE_SETTINGS["DATABASE"],
+            user=DATABASE_SETTINGS["USER"],
+            password=DATABASE_SETTINGS["PASSWORD"]
+		)
 
         if connection.is_connected():
             db_Info = connection.get_server_info()
@@ -244,8 +250,8 @@ def authenticate_and_fetch_devices():
         logger.info("No tokens found. Please authenticate.")
         send_failure_email("No tokens found. Please authenticate.")
         # 1. Get authorization URL and ask user to authenticate
-        logger.info("Visit this URL to authenticate and get the authorization code:")
-        logger.info(get_authorization_url())
+        print("Visit this URL to authenticate and get the authorization code:")
+        print(get_authorization_url())
 
         # 2. Prompt user for the authorization code
         authorization_code = input("Enter the authorization code from the URL: ")
@@ -281,4 +287,3 @@ def authenticate_and_fetch_devices():
 # Main Function to run the task
 if __name__ == "__main__":
     authenticate_and_fetch_devices()
-

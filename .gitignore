@@ -1,6 +1,7 @@
 .env
 tokens.json
 weather_config.json
+next_config.json
 *.log
 service-account-file.json
 *.bak
