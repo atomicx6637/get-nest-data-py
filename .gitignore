@@ -1,7 +1,7 @@
 .env
-tokens.json
 weather_config.json
-next_config.json
+nest_config.json
+nest_tokens.json
 *.log
 service-account-file.json
 *.bak
