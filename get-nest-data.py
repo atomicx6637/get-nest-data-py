@@ -5,7 +5,6 @@ import os
 import mysql.connector
 from mysql.connector import Error
 from dotenv import load_dotenv
-import os
 import logging
 from logging.handlers import RotatingFileHandler
 import smtplib
@@ -13,30 +12,29 @@ import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-# Load configuration from JSON file
-CONFIG_FILE = "/home/trichard/projects/get-nest-data/nest_config.json"
+# Load environment variables
+load_dotenv()
 
-def load_config():
-    """Load API keys and credentials from a JSON config file."""
-    with open(CONFIG_FILE, 'r') as file:
-        return json.load(file)
-
-config = load_config()
+# Load configuration
+CONFIG_PATH = os.getenv("CONFIG_PATH", "config.json")
+if os.path.exists(CONFIG_PATH):
+    with open(CONFIG_PATH, 'r') as config_file:
+        CONFIG = json.load(config_file)
+else:
+    logger.error("Configuration file not found.")
+    exit(1)
 
 # Access the environment variables
-CLIENT_ID = config["CLIENT_ID"]
-CLIENT_SECRET = config["CLIENT_SECRET"]
-EMAIL_SETTINGS = config["EMAIL_SETTINGS"]
-DATABASE_SETTINGS = config["DATABASE_SETTINGS"]
-LOGGING_FILE_PATH = config["LOGGING_FILE_PATH"]
-TOKEN_FILE = config["TOKEN_FILE"]
-REDIRECT_URI = config["REDIRECT_URI"]
-
-
-# API URL for Smart Device Management
-SDM_API_URL = 'https://smartdevicemanagement.googleapis.com/v1/enterprises/7ab17f6b-d1d0-437f-acde-84d3d8a89c3a/devices'  # Replace with your enterprise ID
-SCOPE = 'https://www.googleapis.com/auth/sdm.service'
-TOKEN_URL = 'https://www.googleapis.com/oauth2/v4/token'
+CLIENT_ID = CONFIG.get("client_id")
+CLIENT_SECRET = CONFIG.get("client_secret")
+EMAIL_SETTINGS = CONFIG.get("email_settings")
+DATABASE_SETTINGS = CONFIG.get("database_settings")
+LOGGING_FILE_PATH = CONFIG.get("logging_file_path")
+TOKEN_FILE = CONFIG.get("token_file")
+REDIRECT_URI = CONFIG.get("redirect_uri")
+SDM_API_ENDPOINT = CONFIG.get("sdm_api_endpoint")
+GOOGLE_API_SCOPE = CONFIG.get("google_api_scope")
+TOKEN_API_ENDPOINT = CONFIG.get("token_api_endpoint")
 
 # Set up logger with rotating file handler
 log_file = LOGGING_FILE_PATH + 'get-nest-data.log'  # Replace with your desired log file path
@@ -92,7 +90,7 @@ def send_failure_email(error_message):
 
 # Step 1: Get Authorization Code (this needs to be done manually once)
 def get_authorization_url():
-    auth_url = f'https://accounts.google.com/o/oauth2/v2/auth?client_id={CLIENT_ID}&response_type=code&scope={SCOPE}&redirect_uri={REDIRECT_URI}&access_type=offline&prompt=consent'
+    auth_url = f'https://accounts.google.com/o/oauth2/v2/auth?client_id={CLIENT_ID}&response_type=code&scope={GOOGLE_API_SCOPE}&redirect_uri={REDIRECT_URI}&access_type=offline&prompt=consent'
     return auth_url
 
 # Step 2: Exchange authorization code for tokens
@@ -105,7 +103,7 @@ def exchange_code_for_tokens(authorization_code):
         'grant_type': 'authorization_code'
     }
 
-    response = requests.post(TOKEN_URL, data=data)
+    response = requests.post(f"{TOKEN_API_ENDPOINT}/token", data=data)
     response_data = response.json()
 
     if response.status_code != 200:
@@ -128,7 +126,7 @@ def refresh_access_token(refresh_token):
         'grant_type': 'refresh_token'
     }
 
-    response = requests.post(TOKEN_URL, data=data)
+    response = requests.post(f"{TOKEN_API_ENDPOINT}/token", data=data)
     response_data = response.json()
 
     if response.status_code != 200:
@@ -145,10 +143,10 @@ def refresh_access_token(refresh_token):
 def get_devices(access_token):
     try:
         connection = mysql.connector.connect(
-            host=DATABASE_SETTINGS["HOST"],
-            database=DATABASE_SETTINGS["DATABASE"],
-            user=DATABASE_SETTINGS["USER"],
-            password=DATABASE_SETTINGS["PASSWORD"]
+            host=DATABASE_SETTINGS["host"],
+            database=DATABASE_SETTINGS["database"],
+            user=DATABASE_SETTINGS["user"],
+            password=DATABASE_SETTINGS["password"]
 		)
 
         if connection.is_connected():
@@ -164,7 +162,7 @@ def get_devices(access_token):
             'Content-Type': 'application/json',
         }
 
-        response = requests.get(SDM_API_URL, headers=headers)
+        response = requests.get(f"{SDM_API_ENDPOINT}/devices", headers=headers)
 
         if response.status_code == 200:
             devices = response.json()

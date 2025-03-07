@@ -5,3 +5,4 @@ nest_tokens.json
 *.log
 service-account-file.json
 *.bak
+*.swp
