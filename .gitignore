@@ -2,7 +2,7 @@
 weather_config.json
 nest_config.json
 nest_tokens.json
-*.log
+*.log*
 service-account-file.json
 *.bak
 *.swp
